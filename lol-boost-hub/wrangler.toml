@@ -1,0 +1,14 @@
+name = "boost-hub"
+compatibility_date = "2026-07-19"
+pages_build_output_dir = "public"
+
+# Base de datos (encargos, amigos, registro de capturas)
+[[d1_databases]]
+binding = "DB"
+database_name = "boost-hub-db"
+database_id = "4f9101ac-eef9-4ffc-8567-737728617921"
+
+# Almacén de las capturas antes/después
+[[r2_buckets]]
+binding = "CAPTURES"
+bucket_name = "boost-hub-capturas"

@@ -1,5 +1,6 @@
 // ===== Estado =====
-let currentFriend = null; // nombre del invocador activo
+let currentFriend = null; // invocador activo dentro del modo admin
+let adminPassword = localStorage.getItem("bh_admin_pw") || null;
 const DESCUENTO_FIJO = 0.2; // 20%, fijo para todos los encargos
 
 // Colores por rango, usados en la "escalera" de cada encargo
@@ -14,16 +15,27 @@ function rankColor(label) {
   return key ? RANK_COLORS[key] : "#3A4756";
 }
 
+function rankLadderHTML(oferta) {
+  const parts = (oferta || "").split(/\s*-\s*/);
+  if (parts.length === 2 && parts[0] && parts[1]) {
+    return `
+      <span class="rank-pip" style="background:${rankColor(parts[0])}">${parts[0]}</span>
+      <span class="rank-arrow">→</span>
+      <span class="rank-pip" style="background:${rankColor(parts[1])}">${parts[1]}</span>`;
+  }
+  return `<span class="rank-plain">${oferta || "Sin título"}</span>`;
+}
+
 // ===== Helpers =====
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const money = (n) => `$${Number(n).toFixed(2)}`;
 
 async function api(path, opts = {}) {
-  const res = await fetch(`/api${path}`, {
-    headers: opts.body && !(opts.body instanceof FormData) ? { "Content-Type": "application/json" } : undefined,
-    ...opts,
-  });
+  const headers = {};
+  if (opts.body && !(opts.body instanceof FormData)) headers["Content-Type"] = "application/json";
+  if (adminPassword) headers["X-Admin-Password"] = adminPassword;
+  const res = await fetch(`/api${path}`, { ...opts, headers: { ...headers, ...(opts.headers || {}) } });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Error inesperado" }));
     throw new Error(err.error || "Error inesperado");
@@ -42,13 +54,14 @@ function clearFriendThemeClasses() {
 }
 
 function showView(name) {
-  ["landing", "dashboard", "resumen"].forEach((v) => {
+  ["public", "adminlogin", "landing", "dashboard"].forEach((v) => {
     $(`#view-${v}`).hidden = v !== name;
   });
-  $("#topnav").hidden = name === "landing";
+  const isAdminView = name === "landing" || name === "dashboard";
+  $("#topnav").hidden = !isAdminView;
+  $("#adminEntryBtn").hidden = isAdminView || name === "adminlogin";
   $$(".nav-btn").forEach((b) => b.classList.remove("active"));
   if (name === "dashboard") $("#navDashboard").classList.add("active");
-  if (name === "resumen") $("#navResumen").classList.add("active");
 
   if (name === "dashboard" && currentFriend) {
     document.body.classList.add("theme-dashboard");
@@ -60,7 +73,82 @@ function showView(name) {
   }
 }
 
-// ===== Landing =====
+// ===== Vista pública =====
+async function loadPublicView() {
+  const { porAmigo, totalGeneral } = await api("/resumen");
+  $("#publicTotal").textContent = money(totalGeneral);
+
+  const board = $("#publicLeaderboard");
+  board.innerHTML = "";
+  if (!porAmigo.length) {
+    board.innerHTML = `<div class="empty-state">Todavía no hay datos para mostrar.</div>`;
+  } else {
+    porAmigo.forEach((row, i) => {
+      const el = document.createElement("div");
+      el.className = "lb-row";
+      el.innerHTML = `
+        <span class="lb-rank">#${i + 1}</span>
+        <span class="lb-name">${row.friend}</span>
+        <span class="lb-count">${row.encargos} encargo${row.encargos === 1 ? "" : "s"} · ${row.en_curso} en curso</span>
+        <span class="lb-total">${money(row.total)}</span>`;
+      board.appendChild(el);
+    });
+  }
+
+  const encargos = await api("/encargos?limit=10");
+  const recent = $("#publicRecent");
+  recent.innerHTML = "";
+  if (!encargos.length) {
+    recent.innerHTML = `<div class="empty-state">Todavía no se ha registrado ningún trabajo.</div>`;
+    return;
+  }
+  const tpl = $("#tpl-public-encargo-card");
+  encargos.forEach((e) => {
+    const node = tpl.content.cloneNode(true);
+    $(".public-friend-name", node).textContent = e.friend_name;
+    $(".rank-ladder", node).innerHTML = rankLadderHTML(e.oferta);
+    const pill = $(".estado-pill", node);
+    pill.textContent = e.estado === "completado" ? "Completado" : "En curso";
+    pill.classList.add(e.estado);
+    $(".n-total", node).textContent = money(e.total);
+    $(".n-fecha", node).textContent = e.fecha || "—";
+    recent.appendChild(node);
+  });
+}
+
+$("#adminEntryBtn").addEventListener("click", () => showView("adminlogin"));
+$("#adminCancelBtn").addEventListener("click", () => showView("public"));
+
+// ===== Login de admin =====
+$("#adminLoginForm").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const pw = $("#adminPasswordInput").value;
+  $("#adminLoginError").hidden = true;
+  try {
+    const res = await fetch("/api/admin/verify", {
+      method: "POST",
+      headers: { "X-Admin-Password": pw },
+    });
+    if (!res.ok) throw new Error("bad password");
+    adminPassword = pw;
+    localStorage.setItem("bh_admin_pw", pw);
+    $("#adminPasswordInput").value = "";
+    await loadFriends();
+    showView("landing");
+  } catch {
+    $("#adminLoginError").hidden = false;
+  }
+});
+
+$("#navSalirAdmin").addEventListener("click", () => {
+  adminPassword = null;
+  currentFriend = null;
+  localStorage.removeItem("bh_admin_pw");
+  showView("public");
+  loadPublicView();
+});
+
+// ===== Landing admin (elegir invocador) =====
 async function loadFriends() {
   const friends = await api("/friends");
   const grid = $("#friendGrid");
@@ -86,6 +174,11 @@ $("#addFriendBtn").addEventListener("click", async () => {
   }
 });
 
+$("#navCambiar").addEventListener("click", async () => {
+  await loadFriends();
+  showView("landing");
+});
+
 // ===== Dashboard =====
 async function enterDashboard(name) {
   currentFriend = name;
@@ -96,15 +189,33 @@ async function enterDashboard(name) {
 }
 
 async function refreshDashboard() {
-  const encargos = await api(`/encargos?friend=${encodeURIComponent(currentFriend)}`);
-  const total = encargos.reduce((a, e) => a + e.total, 0);
-  const enCurso = encargos.filter((e) => e.estado === "en_curso").length;
-  $("#dashTotal").textContent = money(total);
-  $("#dashEnCurso").textContent = enCurso;
-  renderEncargos(encargos);
+  const [encargos, resumen] = await Promise.all([
+    api(`/encargos?friend=${encodeURIComponent(currentFriend)}`),
+    api("/resumen"),
+  ]);
+  const row = resumen.porAmigo.find((r) => r.friend === currentFriend);
+  const pendiente = row ? row.total : 0;
+  const ultimaLiquidacion = row ? row.ultima_liquidacion : null;
+
+  $("#dashTotal").textContent = money(pendiente);
+  $("#dashEnCurso").textContent = row ? row.en_curso : 0;
+
+  const liquidarBtn = $("#liquidarBtn");
+  const liquidarInfo = $("#liquidarInfo");
+  if (pendiente > 0) {
+    liquidarBtn.disabled = false;
+    liquidarInfo.textContent = `Pendiente por pagarle a ${currentFriend}: ${money(pendiente)}`;
+  } else {
+    liquidarBtn.disabled = true;
+    liquidarInfo.textContent = ultimaLiquidacion
+      ? `Ya está al día — todo liquidado.`
+      : `Sin saldo pendiente por liquidar.`;
+  }
+
+  renderEncargos(encargos, ultimaLiquidacion);
 }
 
-function renderEncargos(encargos) {
+function renderEncargos(encargos, ultimaLiquidacion) {
   const list = $("#encargosList");
   list.innerHTML = "";
   if (!encargos.length) {
@@ -117,21 +228,12 @@ function renderEncargos(encargos) {
     const card = $(".encargo-card", node);
     card.dataset.id = e.id;
 
-    // Escalera de rango: si la oferta trae "X - Y", se muestran como tramo
-    const ladder = $(".rank-ladder", node);
-    const parts = (e.oferta || "").split(/\s*-\s*/);
-    if (parts.length === 2 && parts[0] && parts[1]) {
-      ladder.innerHTML = `
-        <span class="rank-pip" style="background:${rankColor(parts[0])}">${parts[0]}</span>
-        <span class="rank-arrow">→</span>
-        <span class="rank-pip" style="background:${rankColor(parts[1])}">${parts[1]}</span>`;
-    } else {
-      ladder.innerHTML = `<span class="rank-plain">${e.oferta || "Sin título"}</span>`;
-    }
+    $(".rank-ladder", node).innerHTML = rankLadderHTML(e.oferta);
 
     const pill = $(".estado-pill", node);
-    pill.textContent = e.estado === "completado" ? "Completado" : "En curso";
-    pill.classList.add(e.estado);
+    const pagado = ultimaLiquidacion && e.created_at <= ultimaLiquidacion;
+    pill.textContent = pagado ? "Pagado" : e.estado === "completado" ? "Completado" : "En curso";
+    pill.classList.add(pagado ? "pagado" : e.estado);
 
     $(".n-ingreso", node).textContent = money(e.ingreso);
     $(".n-descuento", node).textContent = `${(e.descuento * 100).toFixed(0)}%`;
@@ -139,7 +241,6 @@ function renderEncargos(encargos) {
     $(".n-fecha", node).textContent = e.fecha || "—";
     $(".encargo-notas", node).textContent = e.notas || "";
 
-    // Capturas
     $$(".captura-slot", node).forEach((slot) => {
       const tipo = slot.dataset.tipo;
       const existing = e.capturas.find((c) => c.tipo === tipo);
@@ -186,6 +287,17 @@ function renderEncargos(encargos) {
   });
 }
 
+$("#liquidarBtn").addEventListener("click", async () => {
+  if (!confirm(`¿Confirmas que ya le pagaste a ${currentFriend} su saldo pendiente? Esto lo deja en $0.00 (el historial no se borra).`)) return;
+  try {
+    const res = await api("/liquidaciones", { method: "POST", body: JSON.stringify({ friend: currentFriend }) });
+    alert(`Listo, se registró el pago de ${money(res.monto)} a ${currentFriend}.`);
+    await refreshDashboard();
+  } catch (e) {
+    alert(e.message);
+  }
+});
+
 // Total en vivo del formulario
 function updatePreview() {
   const ingreso = parseFloat($("#fIngreso").value) || 0;
@@ -229,40 +341,7 @@ $("#encargoForm").addEventListener("submit", async (ev) => {
   }
 });
 
-// ===== Resumen =====
-async function loadResumen() {
-  const { porAmigo, totalGeneral } = await api("/resumen");
-  $("#resumenTotal").textContent = money(totalGeneral);
-  const board = $("#leaderboard");
-  board.innerHTML = "";
-  if (!porAmigo.length) {
-    board.innerHTML = `<div class="empty-state">Todavía no hay datos para mostrar.</div>`;
-    return;
-  }
-  porAmigo.forEach((row, i) => {
-    const el = document.createElement("div");
-    el.className = "lb-row";
-    el.innerHTML = `
-      <span class="lb-rank">#${i + 1}</span>
-      <span class="lb-name">${row.friend}</span>
-      <span class="lb-count">${row.encargos} encargo${row.encargos === 1 ? "" : "s"} · ${row.en_curso} en curso</span>
-      <span class="lb-total">${money(row.total)}</span>`;
-    board.appendChild(el);
-  });
-}
-
-// ===== Nav =====
-$("#navDashboard").addEventListener("click", () => showView("dashboard"));
-$("#navResumen").addEventListener("click", async () => {
-  showView("resumen");
-  await loadResumen();
-});
-$("#navSalir").addEventListener("click", () => {
-  currentFriend = null;
-  showView("landing");
-  loadFriends();
-});
-
 // ===== Init =====
 updatePreview();
-loadFriends();
+loadPublicView();
+showView("public");

@@ -1,6 +1,5 @@
-// Boost Hub — Worker único (reemplaza la carpeta functions/ del modo Pages).
-// Todas las rutas /api/* se resuelven aquí; todo lo demás lo sirve el
-// binding de assets (la carpeta public/).
+// Boost Hub — Worker (modo Git integration). Sirve public/ vía ASSETS
+// y resuelve las rutas /api/* aquí mismo.
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -208,48 +207,40 @@ export default {
     const method = request.method;
 
     try {
-      // /api/friends
       if (path === "/api/friends") {
         if (method === "GET") return await handleFriendsGet(env);
         if (method === "POST") return await handleFriendsPost(request, env);
       }
 
-      // /api/resumen
       if (path === "/api/resumen" && method === "GET") {
         return await handleResumenGet(env);
       }
 
-      // /api/encargos
       if (path === "/api/encargos") {
         if (method === "GET") return await handleEncargosGet(request, env);
         if (method === "POST") return await handleEncargosPost(request, env);
       }
 
-      // /api/encargos/:id/captura
       const capturaMatch = path.match(/^\/api\/encargos\/([^/]+)\/captura$/);
       if (capturaMatch && method === "POST") {
         return await handleCapturaPost(request, env, capturaMatch[1]);
       }
 
-      // /api/encargos/:id
       const encargoMatch = path.match(/^\/api\/encargos\/([^/]+)$/);
       if (encargoMatch) {
         if (method === "PATCH") return await handleEncargoPatch(request, env, encargoMatch[1]);
         if (method === "DELETE") return await handleEncargoDelete(env, encargoMatch[1]);
       }
 
-      // /api/img/:key
       const imgMatch = path.match(/^\/api\/img\/(.+)$/);
       if (imgMatch && method === "GET") {
         return await handleImgGet(env, imgMatch[1]);
       }
 
-      // Cualquier otra ruta /api/* que no matcheó nada
       if (path.startsWith("/api/")) {
         return json({ error: "Ruta no encontrada" }, 404);
       }
 
-      // Todo lo demás: sirve el frontend estático (carpeta public/)
       return env.ASSETS.fetch(request);
     } catch (err) {
       return json({ error: err.message || "Error inesperado" }, 500);

@@ -123,6 +123,80 @@ button, input, textarea {
 }
 .credit-btn:hover { border-color: var(--rose-soft); transform: translateY(-1px); }
 
+.admin-entry-btn {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 9px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+}
+.admin-entry-btn:hover { border-color: var(--rose-soft); color: var(--rose-deep); }
+.admin-entry-btn[hidden] { display: none; }
+
+.section-heading { margin: 36px 0 16px; }
+.section-heading h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 26px;
+  margin: 0;
+  color: var(--rose-deep);
+}
+
+.admin-login-form { max-width: 420px; }
+.error-text {
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 700;
+  margin: 10px 0 0;
+}
+
+.liquidar-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 20px;
+  margin-bottom: 20px;
+  font-size: 13.5px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.btn-liquidar {
+  background: linear-gradient(135deg, var(--mint), var(--mint-deep));
+  color: #fff;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: filter .15s, opacity .15s;
+}
+.btn-liquidar:hover { filter: brightness(1.05); }
+.btn-liquidar:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.estado-pill.pagado { color: var(--mint-deep); border-color: var(--mint); background: color-mix(in srgb, var(--mint) 18%, var(--panel) 82%); }
+
+/* Tarjetas de solo lectura en la vista pública */
+.encargo-card.read-only { padding: 16px 20px; }
+.encargo-card.read-only .encargo-top { margin-bottom: 8px; }
+.public-friend-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--rose-deep);
+}
+.encargo-card.read-only .rank-ladder { margin-bottom: 10px; }
+.encargo-card.read-only .encargo-numbers { grid-template-columns: repeat(2, 1fr); margin-bottom: 0; }
+
 /* ===== Shared view chrome ===== */
 .view { padding-top: 8px; }
 .eyebrow {

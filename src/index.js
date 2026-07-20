@@ -1,11 +1,29 @@
-// Boost Hub — Worker (modo Git integration). Sirve public/ vía ASSETS
-// y resuelve las rutas /api/* aquí mismo.
+// Boost Hub — Worker. Sirve public/ vía ASSETS y resuelve /api/*.
+// Rutas de solo lectura (GET) son públicas. Rutas que escriben datos
+// requieren el header X-Admin-Password igual al secret ADMIN_PASSWORD.
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+function isAdmin(request, env) {
+  const pw = request.headers.get("x-admin-password");
+  return !!env.ADMIN_PASSWORD && pw === env.ADMIN_PASSWORD;
+}
+
+function requireAdmin(request, env) {
+  if (!isAdmin(request, env)) {
+    return json({ error: "Contraseña de admin incorrecta o faltante" }, 401);
+  }
+  return null;
+}
+
+async function handleAdminVerify(request, env) {
+  if (!isAdmin(request, env)) return json({ error: "Contraseña incorrecta" }, 401);
+  return json({ ok: true });
 }
 
 async function handleFriendsGet(env) {
@@ -16,6 +34,9 @@ async function handleFriendsGet(env) {
 }
 
 async function handleFriendsPost(request, env) {
+  const denied = requireAdmin(request, env);
+  if (denied) return denied;
+
   const { name } = await request.json();
   if (!name || !name.trim()) {
     return json({ error: "Falta el nombre del amigo" }, 400);
@@ -33,8 +54,10 @@ async function handleFriendsPost(request, env) {
 async function handleEncargosGet(request, env) {
   const url = new URL(request.url);
   const friend = url.searchParams.get("friend");
+  const limitParam = url.searchParams.get("limit");
+  const limit = limitParam ? Math.min(Number(limitParam) || 20, 100) : null;
 
-  const query = friend
+  let query = friend
     ? `SELECT e.*, f.name as friend_name FROM encargos e
        JOIN friends f ON e.friend_id = f.id
        WHERE f.name = ?
@@ -42,6 +65,7 @@ async function handleEncargosGet(request, env) {
     : `SELECT e.*, f.name as friend_name FROM encargos e
        JOIN friends f ON e.friend_id = f.id
        ORDER BY e.created_at DESC`;
+  if (limit) query += ` LIMIT ${limit}`;
 
   const stmt = env.DB.prepare(query);
   const { results } = friend ? await stmt.bind(friend).all() : await stmt.all();
@@ -65,6 +89,9 @@ async function handleEncargosGet(request, env) {
 }
 
 async function handleEncargosPost(request, env) {
+  const denied = requireAdmin(request, env);
+  if (denied) return denied;
+
   const body = await request.json();
   const { friend, oferta, ingreso, descuento, notas } = body;
 
@@ -103,6 +130,9 @@ async function handleEncargosPost(request, env) {
 }
 
 async function handleEncargoPatch(request, env, id) {
+  const denied = requireAdmin(request, env);
+  if (denied) return denied;
+
   const body = await request.json();
   const fields = [];
   const values = [];
@@ -127,7 +157,10 @@ async function handleEncargoPatch(request, env, id) {
   return json({ ok: true });
 }
 
-async function handleEncargoDelete(env, id) {
+async function handleEncargoDelete(request, env, id) {
+  const denied = requireAdmin(request, env);
+  if (denied) return denied;
+
   const capturas = await env.DB.prepare("SELECT r2_key FROM capturas WHERE encargo_id = ?")
     .bind(id)
     .all();
@@ -140,6 +173,9 @@ async function handleEncargoDelete(env, id) {
 }
 
 async function handleCapturaPost(request, env, encargoId) {
+  const denied = requireAdmin(request, env);
+  if (denied) return denied;
+
   const formData = await request.formData();
   const file = formData.get("file");
   const tipo = formData.get("tipo");
@@ -182,14 +218,20 @@ async function handleImgGet(env, key) {
   });
 }
 
+// Saldo pendiente = encargos posteriores a la última liquidación de cada amigo.
 async function handleResumenGet(env) {
   const { results } = await env.DB.prepare(
-    `SELECT f.name as friend,
+    `SELECT f.id as friend_id,
+            f.name as friend,
             COUNT(e.id) as encargos,
-            COALESCE(SUM(e.total), 0) as total,
-            COALESCE(SUM(CASE WHEN e.estado = 'en_curso' THEN 1 ELSE 0 END), 0) as en_curso
+            COALESCE(SUM(CASE WHEN e.created_at > COALESCE(lq.ultima, '') THEN e.total ELSE 0 END), 0) as total,
+            COALESCE(SUM(e.total), 0) as total_historico,
+            COALESCE(SUM(CASE WHEN e.estado = 'en_curso' THEN 1 ELSE 0 END), 0) as en_curso,
+            lq.ultima as ultima_liquidacion
      FROM friends f
      LEFT JOIN encargos e ON e.friend_id = f.id
+     LEFT JOIN (SELECT friend_id, MAX(created_at) as ultima FROM liquidaciones GROUP BY friend_id) lq
+       ON lq.friend_id = f.id
      GROUP BY f.id
      ORDER BY total DESC`
   ).all();
@@ -200,6 +242,42 @@ async function handleResumenGet(env) {
   return json({ porAmigo: results, totalGeneral, encargosTotales });
 }
 
+// Liquidar: registra que se le pagó a un amigo su saldo pendiente actual,
+// dejándolo en $0 sin borrar el historial de encargos.
+async function handleLiquidarPost(request, env) {
+  const denied = requireAdmin(request, env);
+  if (denied) return denied;
+
+  const { friend } = await request.json();
+  if (!friend) return json({ error: "Falta el amigo a liquidar" }, 400);
+
+  const friendRow = await env.DB.prepare("SELECT id FROM friends WHERE name = ?")
+    .bind(friend)
+    .first();
+  if (!friendRow) return json({ error: "Amigo no encontrado" }, 404);
+
+  const lastLq = await env.DB.prepare(
+    "SELECT MAX(created_at) as ultima FROM liquidaciones WHERE friend_id = ?"
+  ).bind(friendRow.id).first();
+  const desde = lastLq?.ultima || "";
+
+  const pendiente = await env.DB.prepare(
+    "SELECT COALESCE(SUM(total), 0) as monto FROM encargos WHERE friend_id = ? AND created_at > ?"
+  ).bind(friendRow.id, desde).first();
+
+  const monto = pendiente?.monto || 0;
+  if (monto <= 0) {
+    return json({ error: "Este invocador no tiene saldo pendiente" }, 400);
+  }
+
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    "INSERT INTO liquidaciones (friend_id, monto, created_at) VALUES (?, ?, ?)"
+  ).bind(friendRow.id, monto, now).run();
+
+  return json({ ok: true, monto, fecha: now });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -207,6 +285,10 @@ export default {
     const method = request.method;
 
     try {
+      if (path === "/api/admin/verify" && method === "POST") {
+        return await handleAdminVerify(request, env);
+      }
+
       if (path === "/api/friends") {
         if (method === "GET") return await handleFriendsGet(env);
         if (method === "POST") return await handleFriendsPost(request, env);
@@ -216,20 +298,24 @@ export default {
         return await handleResumenGet(env);
       }
 
+      if (path === "/api/liquidaciones" && method === "POST") {
+        return await handleLiquidarPost(request, env);
+      }
+
       if (path === "/api/encargos") {
         if (method === "GET") return await handleEncargosGet(request, env);
         if (method === "POST") return await handleEncargosPost(request, env);
       }
 
-      const capturaMatch = path.match(/^\/api\/encargos\/([^\/]+)\/captura$/);
+      const capturaMatch = path.match(/^\/api\/encargos\/([^/]+)\/captura$/);
       if (capturaMatch && method === "POST") {
         return await handleCapturaPost(request, env, capturaMatch[1]);
       }
 
-      const encargoMatch = path.match(/^\/api\/encargos\/([^\/]+)$/);
+      const encargoMatch = path.match(/^\/api\/encargos\/([^/]+)$/);
       if (encargoMatch) {
         if (method === "PATCH") return await handleEncargoPatch(request, env, encargoMatch[1]);
-        if (method === "DELETE") return await handleEncargoDelete(env, encargoMatch[1]);
+        if (method === "DELETE") return await handleEncargoDelete(request, env, encargoMatch[1]);
       }
 
       const imgMatch = path.match(/^\/api\/img\/(.+)$/);

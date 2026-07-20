@@ -1,0 +1,17 @@
+name = "boosthub"
+main = "src/index.js"
+compatibility_date = "2026-07-19"
+ 
+[assets]
+directory = "public"
+binding = "ASSETS"
+ 
+[[d1_databases]]
+binding = "DB"
+database_name = "boost-hub-db"
+database_id = "4f9101ac-eef9-4ffc-8567-737728617921"
+ 
+[[r2_buckets]]
+binding = "CAPTURES"
+bucket_name = "boost-hub-capturas"
+ 

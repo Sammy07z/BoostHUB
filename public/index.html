@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Boost Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Quicksand:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">▲</span>
+      <span class="brand-name">BOOST<em>HUB</em></span>
+    </div>
+    <nav class="topnav" id="topnav" hidden>
+      <button class="nav-btn" data-view="dashboard" id="navDashboard"></button>
+      <button class="nav-btn" data-view="resumen" id="navResumen">Ranking del escuadrón</button>
+      <button class="nav-btn ghost" id="navSalir">Cambiar de invocador</button>
+      <a class="credit-btn" href="https://guns.lol/iizure" target="_blank" rel="noopener">💌 mis redes</a>
+    </nav>
+  </header>
+
+  <!-- ================= LANDING ================= -->
+  <section id="view-landing" class="view">
+    <div class="landing-hero">
+      <p class="eyebrow">Selecciona tu perfil</p>
+      <h1>¿Quién eres?</h1>
+      <p class="sub">Elige tu nombre para ver tus encargos, registrar uno nuevo y subir tus capturas.</p>
+      <a class="credit-btn" style="margin-top:16px; display:inline-flex;" href="https://guns.lol/iizure" target="_blank" rel="noopener">💌 mis redes</a>
+    </div>
+    <div class="friend-grid" id="friendGrid"><!-- cards --></div>
+    <button class="add-friend-card" id="addFriendBtn">+ Agregar invocador</button>
+  </section>
+
+  <!-- ================= DASHBOARD (por amigo) ================= -->
+  <section id="view-dashboard" class="view" hidden>
+    <div class="dash-header">
+      <div>
+        <p class="eyebrow" id="dashEyebrow">Encargos de</p>
+        <h1 id="dashName">—</h1>
+      </div>
+      <div class="scoreboard">
+        <div class="score-block">
+          <span class="score-label">Ganado (neto)</span>
+          <span class="score-value" id="dashTotal">$0.00</span>
+        </div>
+        <div class="score-block muted">
+          <span class="score-label">En curso</span>
+          <span class="score-value" id="dashEnCurso">0</span>
+        </div>
+      </div>
+    </div>
+
+    <form id="encargoForm" class="encargo-form">
+      <p class="form-title">Registrar encargo</p>
+      <div class="form-grid">
+        <label class="field span2">
+          <span>Oferta / tramo (ej. "Platino 4 - Platino 3")</span>
+          <input type="text" id="fOferta" placeholder="Ej. 4 juegos normal draft 2win" required />
+        </label>
+        <label class="field">
+          <span>Ingreso ($)</span>
+          <input type="number" id="fIngreso" step="0.01" min="0" required />
+        </label>
+        <label class="field">
+          <span>Descuento página</span>
+          <input type="number" id="fDescuento" step="0.01" min="0" max="1" value="0.2" required />
+        </label>
+        <label class="field span2">
+          <span>Fuertes y contras / notas</span>
+          <textarea id="fNotas" rows="2" placeholder="Ej. Master jungla, disponible tardes..."></textarea>
+        </label>
+      </div>
+      <div class="form-footer">
+        <span class="live-total">Total neto: <strong id="fTotalPreview">$0.00</strong></span>
+        <button type="submit" class="btn-primary">Registrar encargo</button>
+      </div>
+    </form>
+
+    <div class="encargos-list" id="encargosList"><!-- cards --></div>
+  </section>
+
+  <!-- ================= RESUMEN ================= -->
+  <section id="view-resumen" class="view" hidden>
+    <div class="landing-hero">
+      <p class="eyebrow">Vista general</p>
+      <h1>Ranking del escuadrón</h1>
+    </div>
+    <div class="resumen-total">
+      <span class="score-label">Total generado por el hub</span>
+      <span class="resumen-total-value" id="resumenTotal">$0.00</span>
+    </div>
+    <div class="leaderboard" id="leaderboard"><!-- filas --></div>
+  </section>
+
+  <footer class="site-footer">
+    hecho con 🌸 por <a href="https://guns.lol/iizure" target="_blank" rel="noopener">izu</a>
+  </footer>
+
+</div>
+
+<!-- Template: tarjeta de amigo -->
+<template id="tpl-friend-card">
+  <button class="friend-card">
+    <span class="friend-initial"></span>
+    <span class="friend-name"></span>
+  </button>
+</template>
+
+<!-- Template: tarjeta de encargo -->
+<template id="tpl-encargo-card">
+  <article class="encargo-card">
+    <div class="encargo-top">
+      <div class="rank-ladder"></div>
+      <span class="estado-pill"></span>
+    </div>
+    <div class="encargo-numbers">
+      <div><span>Ingreso</span><strong class="n-ingreso"></strong></div>
+      <div><span>Descuento</span><strong class="n-descuento"></strong></div>
+      <div><span>Total neto</span><strong class="n-total"></strong></div>
+      <div><span>Fecha</span><strong class="n-fecha"></strong></div>
+    </div>
+    <p class="encargo-notas"></p>
+    <div class="capturas-row">
+      <div class="captura-slot" data-tipo="antes">
+        <span class="captura-label">Antes</span>
+        <div class="captura-preview"></div>
+        <input type="file" accept="image/*" hidden />
+      </div>
+      <div class="captura-slot" data-tipo="despues">
+        <span class="captura-label">Después</span>
+        <div class="captura-preview"></div>
+        <input type="file" accept="image/*" hidden />
+      </div>
+    </div>
+    <div class="encargo-actions">
+      <button class="btn-toggle-estado"></button>
+      <button class="btn-delete">Eliminar</button>
+    </div>
+  </article>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>

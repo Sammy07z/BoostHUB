@@ -20,24 +20,66 @@
     </div>
     <nav class="topnav" id="topnav" hidden>
       <button class="nav-btn" data-view="dashboard" id="navDashboard"></button>
-      <button class="nav-btn" data-view="resumen" id="navResumen">Ranking del escuadrón</button>
-      <button class="nav-btn ghost" id="navSalir">Cambiar de invocador</button>
+      <button class="nav-btn ghost" id="navCambiar">Cambiar de invocador</button>
+      <button class="nav-btn ghost" id="navSalirAdmin">Salir de admin</button>
       <a class="credit-btn" href="https://guns.lol/iizure" target="_blank" rel="noopener">💌 mis redes</a>
     </nav>
+    <button class="admin-entry-btn" id="adminEntryBtn">🔒 admin</button>
   </header>
 
-  <!-- ================= LANDING ================= -->
-  <section id="view-landing" class="view">
+  <!-- ================= VISTA PÚBLICA (solo lectura) ================= -->
+  <section id="view-public" class="view">
     <div class="landing-hero">
-      <p class="eyebrow">Selecciona tu perfil</p>
-      <h1>¿Quién eres?</h1>
-      <p class="sub">Elige tu nombre para ver tus encargos, registrar uno nuevo y subir tus capturas.</p>
+      <p class="eyebrow">Vista del escuadrón</p>
+      <h1>Ranking &amp; actividad</h1>
+      <p class="sub">Así va cada quien. Solo izu puede registrar encargos nuevos — esto es nomás para que veas cuánto llevas.</p>
+    </div>
+
+    <div class="resumen-total">
+      <span class="score-label">Saldo pendiente del hub</span>
+      <span class="resumen-total-value" id="publicTotal">$0.00</span>
+    </div>
+    <div class="leaderboard" id="publicLeaderboard"><!-- filas --></div>
+
+    <div class="section-heading">
+      <p class="eyebrow">Actividad reciente</p>
+      <h2>Últimos trabajos</h2>
+    </div>
+    <div class="encargos-list read-only" id="publicRecent"><!-- cards --></div>
+  </section>
+
+  <!-- ================= LOGIN DE ADMIN ================= -->
+  <section id="view-adminlogin" class="view" hidden>
+    <div class="landing-hero">
+      <p class="eyebrow">Modo admin</p>
+      <h1>Contraseña</h1>
+      <p class="sub">Solo izu entra por aquí para registrar encargos, subir capturas y liquidar pagos.</p>
+    </div>
+    <form id="adminLoginForm" class="encargo-form admin-login-form">
+      <label class="field">
+        <span>Contraseña</span>
+        <input type="password" id="adminPasswordInput" autocomplete="current-password" required />
+      </label>
+      <p class="error-text" id="adminLoginError" hidden>Contraseña incorrecta, intenta de nuevo.</p>
+      <div class="form-footer">
+        <button type="button" class="nav-btn ghost" id="adminCancelBtn">Volver</button>
+        <button type="submit" class="btn-primary">Entrar</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- ================= LANDING ADMIN (elegir invocador) ================= -->
+  <section id="view-landing" class="view" hidden>
+    <div class="landing-hero">
+      <p class="eyebrow">Modo admin</p>
+      <h1>¿A quién editas?</h1>
+      <p class="sub">Elige un invocador para registrar un encargo, subir capturas o liquidar su saldo.</p>
     </div>
     <div class="friend-grid" id="friendGrid"><!-- cards --></div>
     <button class="add-friend-card" id="addFriendBtn">+ Agregar invocador</button>
   </section>
 
-  <!-- ================= DASHBOARD (por amigo) ================= -->
+  <!-- ================= DASHBOARD (admin, por amigo) ================= -->
   <section id="view-dashboard" class="view" hidden>
     <div class="dash-header">
       <div>
@@ -46,7 +88,7 @@
       </div>
       <div class="scoreboard">
         <div class="score-block">
-          <span class="score-label">Ganado (neto)</span>
+          <span class="score-label">Pendiente por pagar</span>
           <span class="score-value" id="dashTotal">$0.00</span>
         </div>
         <div class="score-block muted">
@@ -54,6 +96,11 @@
           <span class="score-value" id="dashEnCurso">0</span>
         </div>
       </div>
+    </div>
+
+    <div class="liquidar-bar">
+      <span id="liquidarInfo">Sin saldo pendiente por liquidar.</span>
+      <button class="btn-liquidar" id="liquidarBtn" disabled>💸 Liquidar saldo</button>
     </div>
 
     <form id="encargoForm" class="encargo-form">
@@ -93,19 +140,6 @@
     <div class="encargos-list" id="encargosList"><!-- cards --></div>
   </section>
 
-  <!-- ================= RESUMEN ================= -->
-  <section id="view-resumen" class="view" hidden>
-    <div class="landing-hero">
-      <p class="eyebrow">Vista general</p>
-      <h1>Ranking del escuadrón</h1>
-    </div>
-    <div class="resumen-total">
-      <span class="score-label">Total generado por el hub</span>
-      <span class="resumen-total-value" id="resumenTotal">$0.00</span>
-    </div>
-    <div class="leaderboard" id="leaderboard"><!-- filas --></div>
-  </section>
-
   <footer class="site-footer">
     <p>hecho con 🌸 por <strong>izu</strong></p>
     <a class="credit-btn footer-credit" href="https://guns.lol/iizure" target="_blank" rel="noopener">💌 mis redes</a>
@@ -121,7 +155,7 @@
   </button>
 </template>
 
-<!-- Template: tarjeta de encargo -->
+<!-- Template: tarjeta de encargo (admin, editable) -->
 <template id="tpl-encargo-card">
   <article class="encargo-card">
     <div class="encargo-top">
@@ -150,6 +184,21 @@
     <div class="encargo-actions">
       <button class="btn-toggle-estado"></button>
       <button class="btn-delete">Eliminar</button>
+    </div>
+  </article>
+</template>
+
+<!-- Template: tarjeta de encargo (vista pública, solo lectura) -->
+<template id="tpl-public-encargo-card">
+  <article class="encargo-card read-only">
+    <div class="encargo-top">
+      <span class="public-friend-name"></span>
+      <span class="estado-pill"></span>
+    </div>
+    <div class="rank-ladder"></div>
+    <div class="encargo-numbers">
+      <div><span>Total neto</span><strong class="n-total"></strong></div>
+      <div><span>Fecha</span><strong class="n-fecha"></strong></div>
     </div>
   </article>
 </template>

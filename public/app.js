@@ -1,5 +1,6 @@
 // ===== Estado =====
 let currentFriend = null; // nombre del invocador activo
+const DESCUENTO_FIJO = 0.2; // 20%, fijo para todos los encargos
 
 // Colores por rango, usados en la "escalera" de cada encargo
 const RANK_COLORS = {
@@ -30,14 +31,33 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
+function slugFriend(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
+function clearFriendThemeClasses() {
+  [...document.body.classList]
+    .filter((c) => c.startsWith("friend-"))
+    .forEach((c) => document.body.classList.remove(c));
+}
+
 function showView(name) {
   ["landing", "dashboard", "resumen"].forEach((v) => {
     $(`#view-${v}`).hidden = v !== name;
   });
   $("#topnav").hidden = name === "landing";
-  $$(" .nav-btn").forEach((b) => b.classList.remove("active"));
+  $$(".nav-btn").forEach((b) => b.classList.remove("active"));
   if (name === "dashboard") $("#navDashboard").classList.add("active");
   if (name === "resumen") $("#navResumen").classList.add("active");
+
+  if (name === "dashboard" && currentFriend) {
+    document.body.classList.add("theme-dashboard");
+    clearFriendThemeClasses();
+    document.body.classList.add("friend-" + slugFriend(currentFriend));
+  } else {
+    document.body.classList.remove("theme-dashboard");
+    clearFriendThemeClasses();
+  }
 }
 
 // ===== Landing =====
@@ -120,7 +140,7 @@ function renderEncargos(encargos) {
     $(".encargo-notas", node).textContent = e.notas || "";
 
     // Capturas
-    $$(" .captura-slot", node).forEach((slot) => {
+    $$(".captura-slot", node).forEach((slot) => {
       const tipo = slot.dataset.tipo;
       const existing = e.capturas.find((c) => c.tipo === tipo);
       const preview = $(".captura-preview", slot);
@@ -169,12 +189,10 @@ function renderEncargos(encargos) {
 // Total en vivo del formulario
 function updatePreview() {
   const ingreso = parseFloat($("#fIngreso").value) || 0;
-  const descuento = parseFloat($("#fDescuento").value) || 0;
-  const total = ingreso - ingreso * descuento;
+  const total = ingreso - ingreso * DESCUENTO_FIJO;
   $("#fTotalPreview").textContent = money(total);
 }
 $("#fIngreso").addEventListener("input", updatePreview);
-$("#fDescuento").addEventListener("input", updatePreview);
 
 $("#encargoForm").addEventListener("submit", async (ev) => {
   ev.preventDefault();
@@ -182,13 +200,28 @@ $("#encargoForm").addEventListener("submit", async (ev) => {
     friend: currentFriend,
     oferta: $("#fOferta").value.trim(),
     ingreso: parseFloat($("#fIngreso").value),
-    descuento: parseFloat($("#fDescuento").value),
+    descuento: DESCUENTO_FIJO,
     notas: $("#fNotas").value.trim(),
   };
   try {
-    await api("/encargos", { method: "POST", body: JSON.stringify(body) });
+    const created = await api("/encargos", { method: "POST", body: JSON.stringify(body) });
+
+    const antesFile = $("#fCapturaAntes").files[0];
+    const despuesFile = $("#fCapturaDespues").files[0];
+    if (antesFile) {
+      const fd = new FormData();
+      fd.append("file", antesFile);
+      fd.append("tipo", "antes");
+      await api(`/encargos/${created.id}/captura`, { method: "POST", body: fd });
+    }
+    if (despuesFile) {
+      const fd = new FormData();
+      fd.append("file", despuesFile);
+      fd.append("tipo", "despues");
+      await api(`/encargos/${created.id}/captura`, { method: "POST", body: fd });
+    }
+
     ev.target.reset();
-    $("#fDescuento").value = 0.2;
     updatePreview();
     await refreshDashboard();
   } catch (e) {

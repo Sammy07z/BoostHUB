@@ -471,14 +471,9 @@ h1 {
   color: var(--text-faint);
   font-size: 13px;
 }
-.site-footer p { margin: 0 0 4px; }
+.site-footer p { margin: 0 0 10px; }
 .site-footer strong { color: var(--rose); }
-.site-footer a {
-  color: var(--rose);
-  font-weight: 700;
-  text-decoration: none;
-}
-.site-footer a:hover { text-decoration: underline; }
+.footer-credit { margin: 0 auto; }
 
 /* ===== Responsive ===== */
 @media (max-width: 640px) {

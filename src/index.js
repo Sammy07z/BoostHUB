@@ -1,6 +1,9 @@
 // Boost Hub — Worker. Sirve public/ vía ASSETS y resuelve /api/*.
 // Rutas de solo lectura (GET) son públicas. Rutas que escriben datos
-// requieren el header X-Admin-Password igual al secret ADMIN_PASSWORD.
+// requieren el header X-Admin-Password igual a ADMIN_PASSWORD de abajo.
+
+// 👉 Para cambiar la contraseña de admin, solo edita esta línea y sube el archivo de nuevo.
+const ADMIN_PASSWORD = "101997";
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -9,20 +12,20 @@ function json(data, status = 200) {
   });
 }
 
-function isAdmin(request, env) {
+function isAdmin(request) {
   const pw = request.headers.get("x-admin-password");
-  return !!env.ADMIN_PASSWORD && pw === env.ADMIN_PASSWORD;
+  return !!pw && pw === ADMIN_PASSWORD;
 }
 
-function requireAdmin(request, env) {
-  if (!isAdmin(request, env)) {
+function requireAdmin(request) {
+  if (!isAdmin(request)) {
     return json({ error: "Contraseña de admin incorrecta o faltante" }, 401);
   }
   return null;
 }
 
-async function handleAdminVerify(request, env) {
-  if (!isAdmin(request, env)) return json({ error: "Contraseña incorrecta" }, 401);
+async function handleAdminVerify(request) {
+  if (!isAdmin(request)) return json({ error: "Contraseña incorrecta" }, 401);
   return json({ ok: true });
 }
 
@@ -34,7 +37,7 @@ async function handleFriendsGet(env) {
 }
 
 async function handleFriendsPost(request, env) {
-  const denied = requireAdmin(request, env);
+  const denied = requireAdmin(request);
   if (denied) return denied;
 
   const { name } = await request.json();
@@ -89,7 +92,7 @@ async function handleEncargosGet(request, env) {
 }
 
 async function handleEncargosPost(request, env) {
-  const denied = requireAdmin(request, env);
+  const denied = requireAdmin(request);
   if (denied) return denied;
 
   const body = await request.json();
@@ -130,7 +133,7 @@ async function handleEncargosPost(request, env) {
 }
 
 async function handleEncargoPatch(request, env, id) {
-  const denied = requireAdmin(request, env);
+  const denied = requireAdmin(request);
   if (denied) return denied;
 
   const body = await request.json();
@@ -158,7 +161,7 @@ async function handleEncargoPatch(request, env, id) {
 }
 
 async function handleEncargoDelete(request, env, id) {
-  const denied = requireAdmin(request, env);
+  const denied = requireAdmin(request);
   if (denied) return denied;
 
   const capturas = await env.DB.prepare("SELECT r2_key FROM capturas WHERE encargo_id = ?")
@@ -173,7 +176,7 @@ async function handleEncargoDelete(request, env, id) {
 }
 
 async function handleCapturaPost(request, env, encargoId) {
-  const denied = requireAdmin(request, env);
+  const denied = requireAdmin(request);
   if (denied) return denied;
 
   const formData = await request.formData();
@@ -245,7 +248,7 @@ async function handleResumenGet(env) {
 // Liquidar: registra que se le pagó a un amigo su saldo pendiente actual,
 // dejándolo en $0 sin borrar el historial de encargos.
 async function handleLiquidarPost(request, env) {
-  const denied = requireAdmin(request, env);
+  const denied = requireAdmin(request);
   if (denied) return denied;
 
   const { friend } = await request.json();
@@ -286,7 +289,7 @@ export default {
 
     try {
       if (path === "/api/admin/verify" && method === "POST") {
-        return await handleAdminVerify(request, env);
+        return await handleAdminVerify(request);
       }
 
       if (path === "/api/friends") {
